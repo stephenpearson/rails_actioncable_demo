@@ -3,6 +3,8 @@
 This is a simple test showing how an ActiveRecord model can be linked into an ExtJS 6
 model via push notifications using ActionCable in Rails 5.
 
+![Screenshot](https://raw.githubusercontent.com/stephenpearson/rails_actioncable_demo/master/demo.png)
+
 # Setup
 
 Use either rbenv or rvm to install Ruby 2.4.0.  Install Ruby Gems to install Rails 5.0.2
