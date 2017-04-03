@@ -1,0 +1,226 @@
+<script>
+  var AppState = {};
+
+  function logEvent(msg) {
+    var datestr = new Date().toJSON();
+    var logstore = Ext.getStore('logstore');
+    logstore.insert(0, {log: datestr + ": " + msg});
+    var maxlen = 200;
+    while(logstore.getCount() > maxlen) {
+      var rec = logstore.getAt(maxlen);
+      logstore.remove(rec);
+    }
+    var logpanel = Ext.getCmp('logpanel');
+    logpanel.getView().focusRow(0);
+  }
+  
+  function updateGrid() {
+    var tree = Ext.getCmp('tree');
+    var allSelected = tree.getSelection();
+    var selected;
+    if(allSelected.length > 0) {
+      selected = allSelected[0];
+      var gridstore = Ext.getStore('gridstore');
+      gridstore.load({url: '/items/' + selected.id + '/people.json'})
+    }
+    if(AppState.subscription) {
+      logEvent("Removing old subscription");
+      App.cable.subscriptions.remove(AppState.subscription);
+    }
+    if(selected) {
+      logEvent("Adding subscription to PersonChannel with id = " + selected.id);
+      AppState.subscription = App.cable.subscriptions.create(
+        {
+          channel: "PersonChannel",
+          item_id: selected.id
+        }, {
+          connected: function() {},
+          disconnected: function() {},
+          received: function(data) {
+            if(data.action === "create") {
+              addRow(data.id, data.name, data.job, data.beer);
+            } else if(data.action === "update") {
+              updateRow(data.id, data.name, data.job, data.beer);
+            } else if(data.action === "delete") {
+              removeRow(data.id);
+            }
+          }
+        }
+      )
+    }
+  }
+
+  function addRow(id, name, job, beer) {
+    logEvent("Adding Info row with id = " + id + ", name = " + name + ", job = " + job + ", beer = " + beer);
+    var gridstore = Ext.getStore('gridstore');
+    gridstore.add({id: id, name: name, job: job, beer: beer});
+  }
+
+  function removeRow(id) {
+    logEvent("Removing Info row with id = " + id);
+    var gridstore = Ext.getStore('gridstore');
+    var row = gridstore.getById(id);
+    if(row) {
+      gridstore.remove(row);
+    }
+  }
+
+  function updateRow(id, name, job, beer) {
+    var gridstore = Ext.getStore('gridstore');
+    var row = gridstore.getById(id);
+    if(row) {
+      gridstore.set({name: name, job: job, beer: beer});
+    }
+  }
+
+  function updateNode(id, parent_id, name) {
+    var treestore = Ext.getStore('treestore');
+    var storeNode = treestore.getNodeById(id);
+    if(storeNode) {
+      storeNode.set({name: name})
+    }
+  }
+
+  function attachNode(id, parent_id, name) {
+    logEvent("Attaching tree node " + name + " with id = " + id + " and parent_id = " + parent_id);
+    var panel = Ext.getCmp('tree');
+    var treestore = Ext.getStore('treestore');
+    var panelNode;
+    if(parent_id) {
+      panelNode = panel.getRootNode().findChild("id", parent_id, true);
+    } else {
+      panelNode = panel.getRootNode();
+    }
+
+    var storeNode;
+    if(parent_id) {
+      storeNode = treestore.getNodeById(parent_id);
+    } else {
+      storeNode = treestore.getRootNode();
+    }
+
+    if(panelNode) {
+      if(storeNode.data.loaded === true || panelNode.isLeaf()) {
+        storeNode.appendChild({id: id, name: name, leaf: true});
+      }
+      if(panelNode.data.expanded === false) {
+        storeNode.data.loaded = false;
+      }
+    }
+  }
+
+  function removeNode(id) {
+    logEvent("Removing tree node with id = " + id);
+    var treestore = Ext.getStore('treestore');
+    var node = treestore.getById(id);
+    if(node) {
+      node.remove(false);
+    }
+  }
+
+  Ext.require('Ext.data.Store');
+
+  Ext.onReady(function() {
+    var itemProxy = Ext.create('Ext.data.proxy.Rest', {
+      url: '/items',
+      appendId: false,
+      format: 'json'
+    });
+    var treestore = Ext.create('Ext.data.TreeStore', {
+      id: 'treestore',
+      nodeParam: 'parent_id',
+      root: {
+        expanded: true,
+      },
+      proxy: itemProxy,
+      autoLoad: true
+    });
+
+    var gridstore = Ext.create('Ext.data.Store', {
+      storeId: 'gridstore',
+      autoLoad: false,
+      fields:[ 'id', 'name', 'job', 'beer' ],
+      proxy: {
+        type: 'rest',
+        url: null
+      }
+    });
+
+    var logstore = Ext.create('Ext.data.Store', {
+      storeId: 'logstore',
+      autoLoad: false,
+      fields: [ 'log' ],
+      proxy: {
+        type: 'memory',
+        reader: {
+          type: 'json'
+        }
+      }
+    });
+
+    var tree = Ext.create('Ext.tree.Panel', {
+      id: 'tree',
+      title: 'Categories',
+      region: 'west',
+      store: treestore,
+      rootVisible: true,
+      displayField: 'name',
+      enableAnimations: true,
+      layout: 'fit',
+      width: '40%',
+      split: true,
+      viewConfig: {
+        markDirty: false
+      },
+      listeners: {
+        click: {
+          element: 'el',
+          fn: function() { updateGrid(); }
+        }
+      }
+    });
+    Ext.create('Ext.window.Window', {
+      id: 'window',
+      title: 'Demo',
+      width: 900,
+      height: 800,
+      bodyPadding: 5,
+      layout: 'border',
+      items: [
+        tree,
+        {
+          xtype: 'gridpanel',
+          id: 'gridpanel',
+          title: 'Info',
+          region: 'center',
+          store: gridstore,
+          layout: 'fit',
+          forceFit: true,
+          columns: [
+            { text: 'Name', dataIndex: 'name' },
+            { text: 'Job', dataIndex: 'job' },
+            { text: 'Beer', dataIndex: 'beer', hidden: true }
+          ]
+        },
+        {
+          xtype: 'gridpanel',
+          id: 'logpanel',
+          height: 300,
+          title: 'Events',
+          region: 'south',
+          layout: 'fit',
+          forceFit: true,
+          collapsible: true,
+          split: true,
+          store: logstore,
+          columns: [
+            { text: '', dataIndex: 'log' }
+          ]
+        }
+      ]
+    }).show();
+
+    //setInterval("Ext.getCmp('myWindow').items.items[0].update('<h1>The time is ..</h1><h3>' + Date() + '</h3>')", 1000);
+    //Ext.getStore('treestore').reload({ callback: function(records, operation, success) { Ext.getCmp('tree').expandPath('/root/1/5/7') } });
+  });
+</script>

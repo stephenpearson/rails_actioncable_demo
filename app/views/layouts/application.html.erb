@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+  <meta charset="utf-8">
+    <title>Demo</title>
+    <%= csrf_meta_tags %>
+
+    <%= stylesheet_link_tag    'application', media: 'all', 'data-turbolinks-track': 'reload' %>
+    <%= javascript_include_tag 'application', 'data-turbolinks-track': 'reload' %>
+    <link rel="stylesheet" href="/extjs/build/classic/theme-neptune/resources/theme-neptune-all.css">
+    <script type="text/javascript" src="/extjs/build/ext-all-debug.js"></script>
+  </head>
+
+  <body>
+    <%= yield %>
+  </body>
+</html>
